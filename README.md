@@ -39,3 +39,11 @@
 
 - 公开静态版：https://acmagnus.github.io/gidhub/
 - 示例站：https://acmagnus.github.io/gidhub-demo/
+
+## 免 key 建站
+
+公开站可以不用 key 预览和下载 HTML。需要真正发布到 GitHub Pages 时：
+
+- 访客在公开站填好内容，点“提交审核（不用 key）”，会打开一个 GitHub Issue 申请；
+- 站主在私有控制台“审核”页确认 HTML，再用服务端保管的 key 发布；
+- 访客全程不需要输入 key，站主的 key 也不会进入公开页面或公开仓库。

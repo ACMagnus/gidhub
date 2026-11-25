@@ -378,6 +378,7 @@ footer .wrap{display:flex;gap:16px;align-items:center;justify-content:space-betw
       <a href="#/" data-nav="home">我的仓库</a>
       <a href="#/new" data-nav="new">建站</a>
       <a href="#/search" data-nav="search">探索</a>
+      <a href="#/review" data-nav="review" id="reviewNav" hidden>审核</a>
     </nav>
     <form class="search" id="topSearch" autocomplete="off">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M11.7 10.3a6.5 6.5 0 1 0-1.4 1.4l3.5 3.5 1.4-1.4-3.5-3.5Zm-4.7.2a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9Z"/></svg>
@@ -1180,13 +1181,43 @@ function buildSiteHtml(data, owner, repo){
     (gh ? '<div style="margin-top:36px"><a style="font-weight:600" href="' + gh + '">在 GitHub 查看这个站点 →</a></div>' : '') +
     '</main><footer><div class="wrap"><span>' + title + '</span><span>Built on GitHub Pages</span></div></footer></div></body></html>';
 }
+async function viewReview(){
+  if(!state.me) return authGate('审核队列只对站主开放。');
+  let issues = [];
+  let err = '';
+  try{ issues = await api('/repos/ACMagnus/gidhub/issues?state=open&labels=site-submission&per_page=30&sort=created&direction=desc'); }
+  catch(e){ err = apiErrorMessage(e); }
+  const list = Array.isArray(issues) ? issues : [];
+  return '<section class="page wrap">' +
+    '<div class="page-head"><div><h1>站点审核</h1><p>访客在公开站提交的建站申请。确认 HTML 后，用你的 key 发布；访客全程不用输入 key。</p></div><a class="btn ghost" href="#/">返回</a></div>' +
+    (err ? '<div class="error-box">' + esc(err) + '</div>' : '') +
+    (list.length ? '<div class="repo-grid">' + list.map(it => {
+      const body = it.body || '';
+      const m = body.match(/```html\s*([\s\S]*?)```/i);
+      const html = m ? m[1].trim() : '';
+      const nameM = body.match(/站点名[：: ]+([^\n\r]+)/);
+      const name = nameM ? nameM[1].trim().replace(/[^a-zA-Z0-9._-]/g,'-').slice(0,39) : 'site-' + it.number;
+      return '<article class="repo-card"><div class="repo-card-top"><div><h3><a href="' + esc(it.html_url) + '" target="_blank" rel="noopener">' + esc(it.title) + '</a></h3><p class="muted small">@' + esc(it.user.login) + ' · ' + esc(new Date(it.created_at).toLocaleString()) + ' · #' + it.number + '</p></div><span class="pill">' + (html ? '有 HTML' : '无 HTML') + '</span></div>' +
+        '<pre class="code-view" style="max-height:180px;overflow:auto;margin:10px 0">' + esc(html ? html.slice(0,600) : body.slice(0,600)) + '</pre>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary sm" type="button" data-action="use-review" data-issue="' + it.number + '" data-name="' + esc(name) + '" data-title="' + esc(it.title) + '" data-html="' + esc(html) + '"' + (html ? '' : ' disabled') + '>用此 HTML 建站</button>' +
+        '<button class="btn sm" type="button" data-action="close-review" data-issue="' + it.number + '">关闭申请</button>' +
+        '<a class="btn sm" href="' + esc(it.html_url) + '" target="_blank" rel="noopener">查看 Issue</a></div></article>';
+    }).join('') + '</div>' : (err ? '' : '<div class="empty"><p>暂无待审核申请。</p><p class="muted">公开站提交后会出现在这里。</p></div>')) +
+    '</section>';
+}
 async function viewNew(){
   const login = state.me ? state.me.login : 'your-name';
+  let draft = null;
+  try{ draft = JSON.parse(sessionStorage.getItem('gidhub.review') || 'null'); }catch(_){}
+  const draftHtml = draft && draft.html ? draft.html : '';
+  const draftName = draft && draft.name ? draft.name : '';
+  const draftBanner = draft ? '<div class="ok-box" style="margin-bottom:14px"><b>来自审核 #' + esc(String(draft.issue || '')) + '</b><span class="muted"> · ' + esc(draft.title || '') + '</span><button class="btn sm" type="button" data-action="clear-review" style="margin-left:auto">清除</button></div>' : '';
   return '<section class="page wrap">' +
     '<div class="page-head"><div><h1>新建站点</h1><p>' + (state.me ? '填好内容，创建仓库并开启 GitHub Pages。发布后网址可以直接分享。' : '可以先预览、下载 HTML，不用 key；要发布到 GitHub Pages 时再连接你自己的 GitHub。') + '</p></div><a class="btn ghost" href="#/">取消</a></div>' +
+    draftBanner +
     '<div class="new-grid">' +
       '<form class="form-card" id="newSiteForm">' +
-        '<div class="field"><label for="siteName">仓库名</label><div class="repo-name-row"><span class="mono muted small owner">' + esc(login) + ' /</span><input class="input mono" id="siteName" name="name" placeholder="my-site" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,38}" required><span class="muted small suffix">.github.io</span></div><span class="hint">英文、数字、- _ .，会变成 ' + esc(login.toLowerCase()) + '.github.io/仓库名/。</span></div>' +
+        '<div class="field"><label for="siteName">仓库名</label><div class="repo-name-row"><span class="mono muted small owner">' + esc(login) + ' /</span><input class="input mono" id="siteName" name="name" placeholder="my-site" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,38}" required value="' + esc(draftName) + '"><span class="muted small suffix">.github.io</span></div><span class="hint">英文、数字、- _ .，会变成 ' + esc(login.toLowerCase()) + '.github.io/仓库名/。</span></div>' +
         '<div class="field"><label for="siteDesc">仓库简介</label><input class="input" id="siteDesc" name="description" placeholder="一句话说明这个站点"></div>' +
         '<div class="field"><label>模板</label><div class="tpl-grid">' +
           '<label class="tpl"><input type="radio" name="template" value="profile" checked><b>个人主页</b><span>名字、介绍、链接</span></label>' +
@@ -1197,11 +1228,12 @@ async function viewNew(){
         '<div class="field"><label for="siteTagline">一句话介绍</label><input class="input" id="siteTagline" name="tagline" placeholder="做 Minecraft 离线启动器，也做一些能直接用的东西。" maxlength="160"></div>' +
         '<div class="field"><label for="siteAbout">正文</label><textarea class="input" id="siteAbout" name="about" placeholder="介绍一下你自己、这个项目，或者这个站点要放什么。" maxlength="1200"></textarea></div>' +
         '<div class="field"><label for="siteAccent">主题色</label><div class="swatches"><input class="color-input" type="color" id="siteAccent" name="accent" value="#1f883d"><button class="swatch" type="button" data-accent="#1f883d" data-on="1" style="background:#1f883d" aria-label="绿色"></button><button class="swatch" type="button" data-accent="#0969da" style="background:#0969da" aria-label="蓝色"></button><button class="swatch" type="button" data-accent="#8250df" style="background:#8250df" aria-label="紫色"></button><button class="swatch" type="button" data-accent="#bc4c00" style="background:#bc4c00" aria-label="橙色"></button><button class="swatch" type="button" data-accent="#1f2328" style="background:#1f2328" aria-label="黑色"></button></div></div>' +
-        '<div class="field"><label class="check"><input type="checkbox" id="useCustom" name="useCustom"> 用我自己写的 HTML 覆盖模板</label><textarea class="input mono" id="siteCustom" name="custom" placeholder="<!doctype html>…" style="display:none;min-height:160px" spellcheck="false"></textarea></div>' +
+        '<div class="field"><label class="check"><input type="checkbox" id="useCustom" name="useCustom"' + (draftHtml ? ' checked' : '') + '> 用我自己写的 HTML 覆盖模板</label><textarea class="input mono" id="siteCustom" name="custom" placeholder="<!doctype html>…" style="' + (draftHtml ? '' : 'display:none;') + 'min-height:160px" spellcheck="false">' + esc(draftHtml) + '</textarea></div>' +
         '<div class="form-actions"><button class="btn primary lg" type="submit">' + (state.me ? '创建并发布到 GitHub Pages' : '连接 GitHub 后发布') + '</button>' +
-          '<button class="btn lg" type="button" data-action="download-site">' + icon('download',14) + ' 下载 HTML（不用 key）</button></div>' +
+          '<button class="btn lg" type="button" data-action="download-site">' + icon('download',14) + ' 下载 HTML（不用 key）</button>' +
+          (state.me ? '' : '<button class="btn lg" type="button" data-action="submit-review">提交审核（不用 key）</button>') + '</div>' +
         '<div id="buildLog" hidden></div>' +
-        '<div class="muted small" style="margin-top:10px">' + (state.me ? '会创建公开仓库，提交 index.html 和 README.md，并开启 Pages。免费账号的 Pages 只支持公开仓库。' : '下载 HTML 不需要 key；发布会在你自己的账号下创建公开仓库，需要你自己的 GitHub key。') + '</div>' +
+        '<div class="muted small" style="margin-top:10px">' + (state.me ? '会创建公开仓库，提交 index.html 和 README.md，并开启 Pages。免费账号的 Pages 只支持公开仓库。' : '下载 HTML 不需要 key；提交审核也不需要 key，但需要登录 GitHub 开一个申请 Issue。审核通过后才由站主发布。') + '</div>' +
       '</form>' +
       '<div class="preview-wrap"><div class="preview-card"><div class="preview-bar"><i></i><i></i><i></i><span class="grow">实时预览</span></div><div class="preview-frame"><iframe id="sitePreview" title="站点预览" sandbox="allow-same-origin"></iframe></div></div>' +
         '<div class="muted small" style="margin-top:8px">预览是本地生成的静态页；发布后会成为 ' + esc(login.toLowerCase()) + '.github.io/仓库名/。</div></div>' +
@@ -1327,6 +1359,38 @@ async function createSite(form){
 async function handleAction(el){
   const action = el.dataset.action;
   if(action === 'refresh'){ clearCache(); render(); return; }
+  if(action === 'submit-review'){
+    const form = document.getElementById('newSiteForm');
+    if(!form) return;
+    const custom = form.useCustom && form.useCustom.checked ? (form.siteCustom ? form.siteCustom.value.trim() : '') : '';
+    const name = (form.siteName && form.siteName.value.trim()) || 'my-site';
+    const html = custom || buildSiteHtml(sampleSiteData(form), 'your-name', name);
+    const body = '<!-- gidhub-site -->\n站点名：' + name + '\n模板：' + (custom ? '自定义 HTML' : (form.template ? (form.template.value || 'profile') : 'profile')) + '\n提交人：访客（无需 key）\n\n```html\n' + html + '\n```\n';
+    const url = 'https://github.com/ACMagnus/gidhub/issues/new?labels=site-submission&title=' + encodeURIComponent('[站点申请] ' + name) + '&body=' + encodeURIComponent(body);
+    try{ navigator.clipboard.writeText(html); }catch(_){}
+    window.open(url, '_blank', 'noopener');
+    showToast('已打开 GitHub 申请页；登录 GitHub 提交即可，不需要 key');
+    return;
+  }
+  if(action === 'use-review'){
+    if(!el) return;
+    const draft = {html: el.getAttribute('data-html') || '', name: el.getAttribute('data-name') || '', title: el.getAttribute('data-title') || '', issue: el.getAttribute('data-issue') || ''};
+    sessionStorage.setItem('gidhub.review', JSON.stringify(draft));
+    location.hash = '#/new';
+    return;
+  }
+  if(action === 'clear-review'){
+    sessionStorage.removeItem('gidhub.review');
+    render();
+    return;
+  }
+  if(action === 'close-review'){
+    if(!el) return;
+    await api('/repos/ACMagnus/gidhub/issues/' + el.getAttribute('data-issue'), {method:'PATCH', body:{state:'closed'}});
+    showToast('已关闭申请');
+    render();
+    return;
+  }
   if(action === 'download-site'){
     const form = document.getElementById('newSiteForm');
     if(!form) return;
@@ -1522,7 +1586,7 @@ async function render(){
 
   const topQ = document.getElementById('topQ');
   if(topQ && seg[0] === 'search') topQ.value = q.get('q') || '';
-  const titleMap = {new:'新建站点 · GidHub', connect:'连接 GitHub · GidHub', search:'探索 · GidHub'};
+  const titleMap = {new:'新建站点 · GidHub', connect:'连接 GitHub · GidHub', search:'探索 · GidHub', review:'站点审核 · GidHub'};
   document.title = seg.length === 0 ? 'GidHub · 用 GitHub 真的建一个网站' : (titleMap[seg[0]] || (decodeURIComponent(location.hash.replace(/^#\//,'').replace(/\?.*$/,'')) + ' · GidHub'));
 
   try{
@@ -1531,6 +1595,7 @@ async function render(){
     else if(seg[0] === 'new') html = await viewNew();
     else if(seg[0] === 'connect') html = await viewConnect();
     else if(seg[0] === 'search') html = await viewSearch(q);
+    else if(seg[0] === 'review' && BACKEND) html = await viewReview();
     else if(seg.length === 1) html = await viewProfile(seg[0]);
     else{
       const [owner, repo] = seg;
@@ -1574,6 +1639,7 @@ window.addEventListener('popstate', render);
   document.getElementById('footStorage').innerHTML = BACKEND
     ? 'key 由服务端保管 · <a href="https://github.com/ACMagnus/gidhub">源码</a>'
     : '你的 key 只保存在本机浏览器 · <a href="https://github.com/ACMagnus/gidhub">源码</a>';
+  if(BACKEND){ const rn = document.getElementById('reviewNav'); if(rn) rn.hidden = false; }
   updateHeader();
   render();
 })();
