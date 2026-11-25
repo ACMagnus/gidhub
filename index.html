@@ -1181,12 +1181,12 @@ function buildSiteHtml(data, owner, repo){
     '</main><footer><div class="wrap"><span>' + title + '</span><span>Built on GitHub Pages</span></div></footer></div></body></html>';
 }
 async function viewNew(){
-  if(!state.me) return authGate('建站需要先连接 GitHub key。连接后，仓库和 Pages 都建在你自己的账号下。');
+  const login = state.me ? state.me.login : 'your-name';
   return '<section class="page wrap">' +
-    '<div class="page-head"><div><h1>新建站点</h1><p>填好内容，创建仓库并开启 GitHub Pages。发布后网址可以直接分享。</p></div><a class="btn ghost" href="#/">取消</a></div>' +
+    '<div class="page-head"><div><h1>新建站点</h1><p>' + (state.me ? '填好内容，创建仓库并开启 GitHub Pages。发布后网址可以直接分享。' : '可以先预览、下载 HTML，不用 key；要发布到 GitHub Pages 时再连接你自己的 GitHub。') + '</p></div><a class="btn ghost" href="#/">取消</a></div>' +
     '<div class="new-grid">' +
       '<form class="form-card" id="newSiteForm">' +
-        '<div class="field"><label for="siteName">仓库名</label><div class="repo-name-row"><span class="mono muted small owner">' + esc(state.me.login) + ' /</span><input class="input mono" id="siteName" name="name" placeholder="my-site" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,38}" required><span class="muted small suffix">.github.io</span></div><span class="hint">英文、数字、- _ .，会变成 ' + esc(state.me.login.toLowerCase()) + '.github.io/仓库名/。</span></div>' +
+        '<div class="field"><label for="siteName">仓库名</label><div class="repo-name-row"><span class="mono muted small owner">' + esc(login) + ' /</span><input class="input mono" id="siteName" name="name" placeholder="my-site" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,38}" required><span class="muted small suffix">.github.io</span></div><span class="hint">英文、数字、- _ .，会变成 ' + esc(login.toLowerCase()) + '.github.io/仓库名/。</span></div>' +
         '<div class="field"><label for="siteDesc">仓库简介</label><input class="input" id="siteDesc" name="description" placeholder="一句话说明这个站点"></div>' +
         '<div class="field"><label>模板</label><div class="tpl-grid">' +
           '<label class="tpl"><input type="radio" name="template" value="profile" checked><b>个人主页</b><span>名字、介绍、链接</span></label>' +
@@ -1198,12 +1198,13 @@ async function viewNew(){
         '<div class="field"><label for="siteAbout">正文</label><textarea class="input" id="siteAbout" name="about" placeholder="介绍一下你自己、这个项目，或者这个站点要放什么。" maxlength="1200"></textarea></div>' +
         '<div class="field"><label for="siteAccent">主题色</label><div class="swatches"><input class="color-input" type="color" id="siteAccent" name="accent" value="#1f883d"><button class="swatch" type="button" data-accent="#1f883d" data-on="1" style="background:#1f883d" aria-label="绿色"></button><button class="swatch" type="button" data-accent="#0969da" style="background:#0969da" aria-label="蓝色"></button><button class="swatch" type="button" data-accent="#8250df" style="background:#8250df" aria-label="紫色"></button><button class="swatch" type="button" data-accent="#bc4c00" style="background:#bc4c00" aria-label="橙色"></button><button class="swatch" type="button" data-accent="#1f2328" style="background:#1f2328" aria-label="黑色"></button></div></div>' +
         '<div class="field"><label class="check"><input type="checkbox" id="useCustom" name="useCustom"> 用我自己写的 HTML 覆盖模板</label><textarea class="input mono" id="siteCustom" name="custom" placeholder="<!doctype html>…" style="display:none;min-height:160px" spellcheck="false"></textarea></div>' +
-        '<div class="form-actions"><button class="btn primary lg" type="submit">创建并发布到 GitHub Pages</button></div>' +
+        '<div class="form-actions"><button class="btn primary lg" type="submit">' + (state.me ? '创建并发布到 GitHub Pages' : '连接 GitHub 后发布') + '</button>' +
+          '<button class="btn lg" type="button" data-action="download-site">' + icon('download',14) + ' 下载 HTML（不用 key）</button></div>' +
         '<div id="buildLog" hidden></div>' +
-        '<div class="muted small" style="margin-top:10px">会创建公开仓库，提交 index.html 和 README.md，并开启 Pages。免费账号的 Pages 只支持公开仓库。</div>' +
+        '<div class="muted small" style="margin-top:10px">' + (state.me ? '会创建公开仓库，提交 index.html 和 README.md，并开启 Pages。免费账号的 Pages 只支持公开仓库。' : '下载 HTML 不需要 key；发布会在你自己的账号下创建公开仓库，需要你自己的 GitHub key。') + '</div>' +
       '</form>' +
       '<div class="preview-wrap"><div class="preview-card"><div class="preview-bar"><i></i><i></i><i></i><span class="grow">实时预览</span></div><div class="preview-frame"><iframe id="sitePreview" title="站点预览" sandbox="allow-same-origin"></iframe></div></div>' +
-        '<div class="muted small" style="margin-top:8px">预览是本地生成的静态页；发布后会成为 ' + esc(state.me.login.toLowerCase()) + '.github.io/仓库名/。</div></div>' +
+        '<div class="muted small" style="margin-top:8px">预览是本地生成的静态页；发布后会成为 ' + esc(login.toLowerCase()) + '.github.io/仓库名/。</div></div>' +
     '</div></section>';
 }
 function updatePreview(){
@@ -1326,6 +1327,21 @@ async function createSite(form){
 async function handleAction(el){
   const action = el.dataset.action;
   if(action === 'refresh'){ clearCache(); render(); return; }
+  if(action === 'download-site'){
+    const form = document.getElementById('newSiteForm');
+    if(!form) return;
+    const custom = form.useCustom && form.useCustom.checked ? (form.siteCustom ? form.siteCustom.value.trim() : '') : '';
+    const html = custom || buildSiteHtml(sampleSiteData(form), state.me ? state.me.login : 'your-name', form.siteName ? form.siteName.value.trim() : 'my-site');
+    const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+    const a = document.createElement('a');
+    const name = (form.siteName && form.siteName.value.trim()) || 'site';
+    a.href = URL.createObjectURL(blob);
+    a.download = name.replace(/[^a-zA-Z0-9._-]/g,'-') + '.html';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    showToast('已下载 HTML');
+    return;
+  }
   if(action === 'toggle-clone'){
     const pop = document.getElementById('clonePop');
     if(pop) pop.style.display = pop.style.display === 'none' ? 'block' : 'none';
