@@ -411,10 +411,11 @@ footer .wrap{display:flex;gap:16px;align-items:center;justify-content:space-betw
 
 const API = 'https://api.github.com';
 const LS_TOKEN = 'gidhub.token';
+const SS_TOKEN = 'gidhub.session.token';
 const DEFAULT_OWNER = 'ACMagnus';
 
 const state = {
-  token: localStorage.getItem(LS_TOKEN) || '',
+  token: localStorage.getItem(LS_TOKEN) || sessionStorage.getItem(SS_TOKEN) || '',
   me: null,
   authError: '',
   cache: new Map(),
@@ -595,11 +596,14 @@ async function verifyToken(token){
   }
   return data;
 }
-async function connectToken(token){
+async function connectToken(token, remember){
   const me = await verifyToken(token);
   state.token = token;
   state.me = me;
-  localStorage.setItem(LS_TOKEN, token);
+  localStorage.removeItem(LS_TOKEN);
+  sessionStorage.removeItem(SS_TOKEN);
+  if(remember === false) sessionStorage.setItem(SS_TOKEN, token);
+  else localStorage.setItem(LS_TOKEN, token);
   clearCache();
   updateHeader();
   return me;
@@ -608,6 +612,7 @@ function disconnectToken(){
   state.token = '';
   state.me = null;
   localStorage.removeItem(LS_TOKEN);
+  sessionStorage.removeItem(SS_TOKEN);
   clearCache();
   updateHeader();
 }
@@ -1101,10 +1106,10 @@ async function viewConnect(){
   return '<section class="page wrap"><div class="connect-box">' +
     '<div class="page-head"><div><h1>连接 GitHub</h1><p>连接后，GidHub 会以你的身份创建仓库、提交文件和开启 Pages。</p></div>' + (state.me ? '<a class="btn ghost" href="#/' + encodeURIComponent(state.me.login) + '">查看主页</a>' : '') + '</div>' +
     (state.me ? '<div class="ok-box"><div style="display:flex;gap:10px;align-items:center">' + avatar(state.me.avatar_url, state.me.login, 'avatar-s') + '<div><b>' + esc(state.me.name || state.me.login) + '</b> <span class="muted">@' + esc(state.me.login) + '</span></div><span class="pill green" style="margin-left:auto">已连接</span></div>' +
-      '<div class="kv"><span class="k">账号</span><span>@' + esc(state.me.login) + '</span><span class="k">仓库</span><span>' + (state.me.public_repos||0) + ' public · ' + (state.me.total_private_repos||0) + ' private</span><span class="k">Key 权限</span><span>' + (scopes ? scopes.split(',').filter(Boolean).map(s => '<span class="scope">' + esc(s.trim()) + '</span>').join(' ') : '细粒度 key（权限以实际接口为准）') + '</span></div>' +
+      '<div class="kv"><span class="k">账号</span><span>@' + esc(state.me.login) + '</span><span class="k">仓库</span><span>' + (state.me.public_repos||0) + ' public · ' + (state.me.total_private_repos||0) + ' private</span><span class="k">Key 权限</span><span>' + (scopes ? scopes.split(',').filter(Boolean).map(s => '<span class="scope">' + esc(s.trim()) + '</span>').join(' ') : '细粒度 key（权限以实际接口为准）') + '</span><span class="k">存储</span><span>仅本机浏览器，页面只显示账号，不显示 key</span></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="#/new">新建站点</a><button class="btn danger" data-action="disconnect">断开连接</button></div></div>' : '') +
     (!state.me ? '<div class="warn">' + icon('lock',14,'') + ' key 只写进这个浏览器的 localStorage，请求直接发往 api.github.com。它不会进入页面源码、仓库或任何第三方服务器。公用电脑用完请断开。</div>' +
-      '<form id="connectForm"><div class="field"><label for="tokenInput">GitHub Personal Access Token</label><div class="token-row"><input class="input mono" id="tokenInput" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_… 或 github_pat_…" required><button class="btn primary" type="submit">验证并保存</button></div><span class="hint">经典 token 勾选 <b>repo</b> 即可；细粒度 token 需要 Contents、Administration、Pages 的读写权限。</span></div><div id="connectMsg"></div></form>' +
+      '<form id="connectForm"><div class="field"><label for="tokenInput">GitHub Personal Access Token</label><div class="token-row"><input class="input mono" id="tokenInput" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_… 或 github_pat_…" required><button class="btn primary" type="submit">验证并保存</button></div><span class="hint">经典 token 勾选 <b>repo</b> 即可；细粒度 token 需要 Contents、Administration、Pages 的读写权限。</span><label class="check" style="margin-top:10px"><input type="checkbox" id="rememberKey" checked> 在这台设备记住（默认）。取消则只保留到关闭浏览器。</label></div><div id="connectMsg"></div></form>' +
       '<div class="panel" style="margin-top:22px"><div class="panel-b"><b style="font-size:13px">没有 key？</b><p class="muted small" style="margin:6px 0 12px">去 GitHub 生成一个，只给这个站用，随时可以撤销。</p><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sm" href="https://github.com/settings/tokens/new?scopes=repo&description=GidHub" target="_blank" rel="noopener">生成经典 token（repo）</a><a class="btn sm" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">生成细粒度 token</a></div></div></div>' : '') +
   '</div></section>';
 }
@@ -1383,7 +1388,7 @@ document.addEventListener('submit', async function(e){
     if(!token){ if(msg) msg.innerHTML = '<div class="err-box">把 key 粘进来</div>'; return; }
     btn.disabled = true; btn.textContent = '验证中…';
     try{
-      await connectToken(token);
+      await connectToken(token, form.rememberKey ? form.rememberKey.checked : true);
       if(msg) msg.innerHTML = '<div class="ok-box">连接成功，正在跳转…</div>';
       state.authError = '';
       showToast('已连接 @' + state.me.login);
@@ -1527,6 +1532,7 @@ window.addEventListener('popstate', render);
       state.token = '';
       state.me = null;
       localStorage.removeItem(LS_TOKEN);
+      sessionStorage.removeItem(SS_TOKEN);
     }
   }
   updateHeader();
