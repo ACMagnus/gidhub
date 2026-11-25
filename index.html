@@ -1368,7 +1368,9 @@ async function handleAction(el){
     const body = '<!-- gidhub-site -->\n站点名：' + name + '\n模板：' + (custom ? '自定义 HTML' : (form.template ? (form.template.value || 'profile') : 'profile')) + '\n提交人：访客（无需 key）\n\n```html\n' + html + '\n```\n';
     const url = 'https://github.com/ACMagnus/gidhub/issues/new?labels=site-submission&title=' + encodeURIComponent('[站点申请] ' + name) + '&body=' + encodeURIComponent(body);
     try{ navigator.clipboard.writeText(html); }catch(_){}
-    window.open(url, '_blank', 'noopener');
+    const win = window.open(url, '_blank');
+    if(win){ try{ win.opener = null; }catch(_){} }
+    else { location.href = url; return; }
     showToast('已打开 GitHub 申请页；登录 GitHub 提交即可，不需要 key');
     return;
   }
