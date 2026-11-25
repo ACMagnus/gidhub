@@ -1287,7 +1287,7 @@ async function createSite(form){
         '<a class="btn" href="https://github.com/' + owner + '/' + repo.name + '" target="_blank" rel="noopener">' + icon('external',14) + ' GitHub</a></div>';
     box.appendChild(done);
     btn.disabled = false;
-    setBtn('再建一个');
+    setBtn('创建并发布到 GitHub Pages');
     form.siteName.value = '';
     updateHeader();
   }catch(e){
@@ -1484,8 +1484,8 @@ async function render(){
 
   const topQ = document.getElementById('topQ');
   if(topQ && seg[0] === 'search') topQ.value = q.get('q') || '';
-  const hash = location.hash;
-  document.title = hash && hash !== '#/' ? decodeURIComponent(hash.replace(/^#\//,'').replace(/\?.*$/,'')) + ' · GidHub' : 'GidHub · 用 GitHub 真的建一个网站';
+  const titleMap = {new:'新建站点 · GidHub', connect:'连接 GitHub · GidHub', search:'探索 · GidHub'};
+  document.title = seg.length === 0 ? 'GidHub · 用 GitHub 真的建一个网站' : (titleMap[seg[0]] || (decodeURIComponent(location.hash.replace(/^#\//,'').replace(/\?.*$/,'')) + ' · GidHub'));
 
   try{
     let html = '';
