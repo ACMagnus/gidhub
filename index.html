@@ -400,7 +400,7 @@ footer .wrap{display:flex;gap:16px;align-items:center;justify-content:space-betw
 <footer>
   <div class="wrap">
     <span>GidHub · 基于 GitHub API 的建站控制台，非 GitHub 官方页面</span>
-    <span>你的 key 只保存在本机浏览器 · <a href="https://github.com/ACMagnus/gidhub">源码</a></span>
+    <span id="footStorage">你的 key 只保存在本机浏览器 · <a href="https://github.com/ACMagnus/gidhub">源码</a></span>
   </div>
 </footer>
 
@@ -409,13 +409,15 @@ footer .wrap{display:flex;gap:16px;align-items:center;justify-content:space-betw
 <script>
 'use strict';
 
-const API = 'https://api.github.com';
+const BACKEND = !!window.GIDHUB_BACKEND;
+const API = BACKEND ? '/api/github' : 'https://api.github.com';
 const LS_TOKEN = 'gidhub.token';
 const SS_TOKEN = 'gidhub.session.token';
 const DEFAULT_OWNER = 'ACMagnus';
 
 const state = {
-  token: localStorage.getItem(LS_TOKEN) || sessionStorage.getItem(SS_TOKEN) || '',
+  backend: BACKEND,
+  token: BACKEND ? '' : (localStorage.getItem(LS_TOKEN) || sessionStorage.getItem(SS_TOKEN) || ''),
   me: null,
   authError: '',
   cache: new Map(),
@@ -436,6 +438,13 @@ function safeUrl(value, fallback){
     if (u.protocol === 'http:' || u.protocol === 'https:') return esc(u.href);
   }catch(_){}
   return fallback || '#';
+}
+function fileUrl(value){
+  if(!value) return '#';
+  if(BACKEND && /^https:\/\/(raw\.githubusercontent\.com|objects\.githubusercontent\.com|github\.com|codeload\.github\.com)\//i.test(String(value))){
+    return '/api/asset?url=' + encodeURIComponent(String(value));
+  }
+  return safeUrl(value);
 }
 function timeAgo(iso){
   if(!iso) return '';
@@ -539,7 +548,8 @@ async function api(path, opts){
     'Accept': 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28'
   }, opts.headers || {});
-  if(state.token) headers['Authorization'] = 'Bearer ' + state.token;
+  if(state.token && !BACKEND) headers['Authorization'] = 'Bearer ' + state.token;
+  if(BACKEND && opts.method && opts.method !== 'GET' && opts.method !== 'HEAD') headers['X-GidHub-CSRF'] = '1';
   let body = opts.body;
   if(body && typeof body === 'object' && !(body instanceof FormData)){
     headers['Content-Type'] = 'application/json';
@@ -566,7 +576,7 @@ async function api(path, opts){
 }
 
 async function cached(path, ttl){
-  const key = path + (state.token ? '|auth' : '|anon');
+  const key = path + (BACKEND ? '|backend' : (state.token ? '|auth' : '|anon'));
   const hit = state.cache.get(key);
   if(hit && Date.now() - hit.at < (ttl || 60000)) return hit.value;
   const value = await api(path);
@@ -608,7 +618,12 @@ async function connectToken(token, remember){
   updateHeader();
   return me;
 }
-function disconnectToken(){
+async function disconnectToken(){
+  if(BACKEND){
+    try{ await fetch('/api/logout', {method:'POST', headers:{'X-GidHub-CSRF':'1'}}); }catch(_){}
+    location.href = '/login';
+    return;
+  }
   state.token = '';
   state.me = null;
   localStorage.removeItem(LS_TOKEN);
@@ -678,7 +693,7 @@ function markdown(src, base){
     return html.replace(/<img src="([^"]+)" alt="([^"]*)"/g, (m, src, alt) => {
       if(/^https?:/.test(src)) return m;
       const raw = 'https://raw.githubusercontent.com/' + base.owner + '/' + base.repo + '/' + encodeURIComponent(base.branch) + '/' + encodePath(base.path ? base.path + '/' + src : src);
-      return '<img src="' + raw + '" alt="' + alt + '" loading="lazy">';
+      return '<img src="' + fileUrl(raw) + '" alt="' + alt + '" loading="lazy">';
     });
   };
   for(let i=0;i<lines.length;i++){
@@ -755,13 +770,13 @@ async function viewHome(){
       '<div>' +
         '<div class="eyebrow">' + icon('check', 12) + ' GITHUB PAGES · 真建站</div>' +
         '<h1>用 GitHub 账号，<br>真的建一个网站。</h1>' +
-        '<p>连接你的 GitHub key，选一个模板，填上标题和介绍。GidHub 会在你的账号下创建仓库、提交文件、开启 Pages，最后给你一个能直接打开的网址。没有服务器，也没有假预览。</p>' +
+        '<p>' + (BACKEND ? '站主 key 已保存在服务端，直接选模板、填标题和介绍。' : '连接你的 GitHub key，选一个模板，填上标题和介绍。') + 'GidHub 会在你的账号下创建仓库、提交文件、开启 Pages，最后给你一个能直接打开的网址。' + (BACKEND ? 'key 不出服务端，仓库和站点都在 GitHub。' : '没有服务器，也没有假预览。') + '</p>' +
         '<div class="hero-actions">' +
           '<a class="btn primary lg" href="#/new">' + icon('plus',16) + ' 开始建站</a>' +
           '<a class="btn lg" href="' + (signed ? '#/' + encodeURIComponent(state.me.login) : '#/connect') + '">' + (signed ? '查看我的主页' : '先连接 GitHub') + '</a>' +
         '</div>' +
         '<p style="margin:0 0 16px"><a class="small" href="https://acmagnus.github.io/gidhub-demo/" target="_blank" rel="noopener">先看看示例站点 →</a></p>' +
-        '<div class="hero-meta"><span>' + icon('check',12) + ' 创建真仓库</span><span>' + icon('globe',12) + ' 生成真网址</span><span>' + icon('lock',12) + ' key 只存本机</span></div>' +
+        '<div class="hero-meta"><span>' + icon('check',12) + ' 创建真仓库</span><span>' + icon('globe',12) + ' 生成真网址</span><span>' + icon('lock',12) + (BACKEND ? ' key 由服务端保管' : ' key 只存本机') + '</span></div>' +
       '</div>' +
       '<div class="hero-shot" aria-label="示例站点预览">' +
         '<div class="shot-bar"><i></i><i></i><i></i><span class="url">' + (signed ? esc(state.me.login) : 'your-name') + '.github.io/my-site</span></div>' +
@@ -778,7 +793,7 @@ async function viewHome(){
       '</div>' +
       '<aside>' +
         '<div class="side-steps"><h3>三步，真的上线</h3>' +
-          '<div class="step"><span class="n">1</span><div><b>连接 GitHub key</b><span>只存本机浏览器，请求直连 api.github.com。</span></div></div>' +
+          '<div class="step"><span class="n">1</span><div><b>' + (BACKEND ? '登录私有控制台' : '连接 GitHub key') + '</b><span>' + (BACKEND ? '站主密码登录，key 由服务端保管。' : '只存本机浏览器，请求直连 api.github.com。') + '</span></div></div>' +
           '<div class="step"><span class="n">2</span><div><b>选模板，填内容</b><span>右边实时预览，不满意就改。</span></div></div>' +
           '<div class="step"><span class="n">3</span><div><b>创建仓库并开 Pages</b><span>自动提交文件、开启 Pages，拿到真网址。</span></div></div>' +
         '</div>' +
@@ -984,7 +999,7 @@ async function viewBlob(owner, repo, path, branch){
   const canEdit = state.me && repoData.permissions && repoData.permissions.push;
   const body = textExt
     ? '<div class="code-view"><div class="linenos">' + content.split('\n').map((_, i) => i+1).join('\n') + '</div><div class="code-lines">' + esc(content) + '</div></div>'
-    : (item.download_url && /\.(png|jpg|jpeg|gif|webp|ico)$/i.test(item.name) ? '<div class="binary"><img src="' + safeUrl(item.download_url) + '" alt="' + esc(item.name) + '"></div>' : '<div class="binary">' + icon('file',36,'') + '<p>二进制文件 · ' + fmtBytes(item.size) + '</p><a class="btn" href="' + safeUrl(item.download_url) + '" target="_blank" rel="noopener">下载</a></div>');
+    : (item.download_url && /\.(png|jpg|jpeg|gif|webp|ico)$/i.test(item.name) ? '<div class="binary"><img src="' + fileUrl(item.download_url) + '" alt="' + esc(item.name) + '"></div>' : '<div class="binary">' + icon('file',36,'') + '<p>二进制文件 · ' + fmtBytes(item.size) + '</p><a class="btn" href="' + fileUrl(item.download_url) + '" target="_blank" rel="noopener">下载</a></div>');
 
   return '<section class="repo wrap">' +
     '<div class="repo-head"><div class="repo-title"><span class="owner">' + esc(owner) + '</span><span>/</span><span class="name"><a href="' + repoHash(owner, repo) + '">' + esc(repo) + '</a></span><span class="pill">' + (repoData.private ? 'Private' : 'Public') + '</span>' +
@@ -995,7 +1010,7 @@ async function viewBlob(owner, repo, path, branch){
       '<div class="breadcrumb"><a href="' + repoHash(owner, repo) + '">' + esc(repo) + '</a>' + String(path).split('/').filter(Boolean).map((p, i, arr) => '<span class="sep">/</span>' + (i === arr.length - 1 ? '<span class="current">' + esc(p) + '</span>' : '<span>' + esc(p) + '</span>')).join('') + '</div>' +
       '<div class="file-head"><span class="ficon" style="color:#656d76">' + icon('file',18) + '</span><span class="path">' + esc(item.path) + '</span><span class="muted small">' + fmtBytes(item.size) + '</span>' +
         '<div class="right">' + (canEdit ? '<a class="mini" href="' + repoHash(owner, repo) + '/edit/' + encodeURI(item.path) + '?branch=' + encodeURIComponent(branchName) + '">编辑</a>' : '') +
-          '<a class="mini" href="' + safeUrl(item.download_url) + '" target="_blank" rel="noopener">原始文件</a>' +
+          '<a class="mini" href="' + fileUrl(item.download_url) + '" target="_blank" rel="noopener">原始文件</a>' +
           '<a class="mini" href="' + safeUrl(repoData.html_url) + '/blob/' + encodeURIComponent(branchName) + '/' + encodePath(item.path) + '" target="_blank" rel="noopener">' + icon('external',14) + '</a></div></div>' +
       '<div class="file-body">' + body + '</div>' +
       (latest ? '<div class="muted small" style="margin-top:10px">最近提交：' + esc(latest.commit.message.split('\n')[0]) + ' · ' + timeAgo(latest.commit.author.date) + ' · ' + esc(String(latest.sha).slice(0,7)) + '</div>' : '') +
@@ -1003,7 +1018,7 @@ async function viewBlob(owner, repo, path, branch){
       '<div class="side-card"><h3>文件</h3><div class="side-list">' +
         '<div class="row">' + icon('file',14) + ' <span class="grow">' + esc(item.name) + '</span></div>' +
         '<div class="row">' + icon('clock',14) + ' ' + (latest ? timeAgo(latest.commit.author.date) : '') + '</div>' +
-        '<div class="row">' + icon('download',14) + ' <a href="' + safeUrl(item.download_url) + '" target="_blank" rel="noopener">下载原文件</a></div>' +
+        '<div class="row">' + icon('download',14) + ' <a href="' + fileUrl(item.download_url) + '" target="_blank" rel="noopener">下载原文件</a></div>' +
       '</div></div>' +
     '</aside></div></section>';
 }
@@ -1076,7 +1091,7 @@ async function viewReleases(owner, repo){
       (releases.length ? releases.map((r, i) => '<div class="release-card"><h2>' + esc(r.name || r.tag_name) + '</h2>' +
         '<div class="release-meta"><span class="tag">' + esc(r.tag_name) + '</span>' + (i===0 ? ' <span class="latest">Latest</span>' : '') + ' · ' + timeAgo(r.published_at) + ' · ' + (r.assets ? r.assets.length : 0) + ' assets</div>' +
         (r.body ? '<div class="readme-b" style="padding:0;border:0">' + markdown(r.body) + '</div>' : '') +
-        (r.assets || []).map(a => '<div class="asset">' + icon('download',20,'') + '<div class="grow"><b>' + esc(a.name) + '</b><br><span>' + fmtBytes(a.size) + ' · 下载 ' + (a.download_count||0) + ' 次</span></div><a class="btn" href="' + safeUrl(a.browser_download_url) + '">下载</a></div>').join('') +
+        (r.assets || []).map(a => '<div class="asset">' + icon('download',20,'') + '<div class="grow"><b>' + esc(a.name) + '</b><br><span>' + fmtBytes(a.size) + ' · 下载 ' + (a.download_count||0) + ' 次</span></div><a class="btn" href="' + fileUrl(a.browser_download_url) + '">下载</a></div>').join('') +
         '</div>').join('') : '<div class="empty">' + icon('download',36,'') + '<h3>还没有 Release</h3><p>发布成品后会出现在这里，资产可以直接下载。</p></div>') +
     '</div></section>';
 }
@@ -1099,18 +1114,18 @@ function searchRow(repo){
 
 /* ===== 连接页 ===== */
 function authGate(message){
-  return '<section class="page wrap"><div class="gate"><div class="lock">' + icon('lock',28,'') + '</div><h1>先连接 GitHub</h1><p>' + esc(message || '建站、改文件、开 Issue 都需要你的 GitHub key。') + '</p><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><a class="btn primary lg" href="#/connect">连接 GitHub</a><a class="btn lg" href="#/">先逛逛</a></div></div></section>';
+  return '<section class="page wrap"><div class="gate"><div class="lock">' + icon('lock',28,'') + '</div><h1>先连接 GitHub</h1><p>' + esc(BACKEND ? '这个控制台只对站主开放，请先登录。' : (message || '建站、改文件、开 Issue 都需要你的 GitHub key。')) + '</p><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap"><a class="btn primary lg" href="' + (BACKEND ? '/login' : '#/connect') + '">' + (BACKEND ? '登录控制台' : '连接 GitHub') + '</a><a class="btn lg" href="#/">先逛逛</a></div></div></section>';
 }
 async function viewConnect(){
   const scopes = state.lastHeaders ? state.lastHeaders.get('x-oauth-scopes') : null;
   return '<section class="page wrap"><div class="connect-box">' +
-    '<div class="page-head"><div><h1>连接 GitHub</h1><p>连接后，GidHub 会以你的身份创建仓库、提交文件和开启 Pages。</p></div>' + (state.me ? '<a class="btn ghost" href="#/' + encodeURIComponent(state.me.login) + '">查看主页</a>' : '') + '</div>' +
-    (state.me ? '<div class="ok-box"><div style="display:flex;gap:10px;align-items:center">' + avatar(state.me.avatar_url, state.me.login, 'avatar-s') + '<div><b>' + esc(state.me.name || state.me.login) + '</b> <span class="muted">@' + esc(state.me.login) + '</span></div><span class="pill green" style="margin-left:auto">已连接</span></div>' +
-      '<div class="kv"><span class="k">账号</span><span>@' + esc(state.me.login) + '</span><span class="k">仓库</span><span>' + (state.me.public_repos||0) + ' public · ' + (state.me.total_private_repos||0) + ' private</span><span class="k">Key 权限</span><span>' + (scopes ? scopes.split(',').filter(Boolean).map(s => '<span class="scope">' + esc(s.trim()) + '</span>').join(' ') : '细粒度 key（权限以实际接口为准）') + '</span><span class="k">存储</span><span>仅本机浏览器，页面只显示账号，不显示 key</span></div>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="#/new">新建站点</a><button class="btn danger" data-action="disconnect">断开连接</button></div></div>' : '') +
-    (!state.me ? '<div class="warn">' + icon('lock',14,'') + ' key 只写进这个浏览器的 localStorage，请求直接发往 api.github.com。它不会进入页面源码、仓库或任何第三方服务器。公用电脑用完请断开。</div>' +
+    '<div class="page-head"><div><h1>' + (BACKEND ? '私有控制台' : '连接 GitHub') + '</h1><p>' + (BACKEND ? 'GitHub key 由服务端保管，浏览器只拿登录会话，不接触 key。' : '连接后，GidHub 会以你的身份创建仓库、提交文件和开启 Pages。') + '</p></div>' + (state.me ? '<a class="btn ghost" href="#/' + encodeURIComponent(state.me.login) + '">查看主页</a>' : '') + '</div>' +
+    (state.me ? '<div class="ok-box"><div style="display:flex;gap:10px;align-items:center">' + avatar(state.me.avatar_url, state.me.login, 'avatar-s') + '<div><b>' + esc(state.me.name || state.me.login) + '</b> <span class="muted">@' + esc(state.me.login) + '</span></div><span class="pill green" style="margin-left:auto">已登录</span></div>' +
+      '<div class="kv"><span class="k">账号</span><span>@' + esc(state.me.login) + '</span><span class="k">仓库</span><span>' + (state.me.public_repos||0) + ' public · ' + (state.me.total_private_repos||0) + ' private</span><span class="k">Key 权限</span><span>' + (scopes ? scopes.split(',').filter(Boolean).map(s => '<span class="scope">' + esc(s.trim()) + '</span>').join(' ') : (BACKEND ? '服务端 key，权限以实际接口为准' : '细粒度 key（权限以实际接口为准）')) + '</span><span class="k">存储</span><span>' + (BACKEND ? '服务端私有配置，页面和仓库都不含 key' : '仅本机浏览器，页面只显示账号，不显示 key') + '</span></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="#/new">新建站点</a><button class="btn danger" data-action="disconnect">' + (BACKEND ? '退出登录' : '断开连接') + '</button></div></div>' : '') +
+    (!state.me ? (BACKEND ? '<div class="warn">' + icon('lock',14,'') + ' 这个页面只对站主开放。请回登录页输入密码。</div><p style="margin-top:14px"><a class="btn primary" href="/login">去登录</a></p>' : '<div class="warn">' + icon('lock',14,'') + ' key 只写进这个浏览器的 localStorage，请求直接发往 api.github.com。它不会进入页面源码、仓库或任何第三方服务器。公用电脑用完请断开。</div>' +
       '<form id="connectForm"><div class="field"><label for="tokenInput">GitHub Personal Access Token</label><div class="token-row"><input class="input mono" id="tokenInput" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_… 或 github_pat_…" required><button class="btn primary" type="submit">验证并保存</button></div><span class="hint">经典 token 勾选 <b>repo</b> 即可；细粒度 token 需要 Contents、Administration、Pages 的读写权限。</span><label class="check" style="margin-top:10px"><input type="checkbox" id="rememberKey" checked> 在这台设备记住（默认）。取消则只保留到关闭浏览器。</label></div><div id="connectMsg"></div></form>' +
-      '<div class="panel" style="margin-top:22px"><div class="panel-b"><b style="font-size:13px">没有 key？</b><p class="muted small" style="margin:6px 0 12px">去 GitHub 生成一个，只给这个站用，随时可以撤销。</p><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sm" href="https://github.com/settings/tokens/new?scopes=repo&description=GidHub" target="_blank" rel="noopener">生成经典 token（repo）</a><a class="btn sm" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">生成细粒度 token</a></div></div></div>' : '') +
+      '<div class="panel" style="margin-top:22px"><div class="panel-b"><b style="font-size:13px">没有 key？</b><p class="muted small" style="margin:6px 0 12px">去 GitHub 生成一个，只给这个站用，随时可以撤销。</p><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sm" href="https://github.com/settings/tokens/new?scopes=repo&description=GidHub" target="_blank" rel="noopener">生成经典 token（repo）</a><a class="btn sm" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">生成细粒度 token</a></div></div></div>') : '') +
   '</div></section>';
 }
 
@@ -1523,8 +1538,13 @@ window.addEventListener('popstate', render);
 
 /* 首次进入 */
 (async function init(){
-  updateHeader();
-  if(state.token){
+  if(BACKEND){
+    try{
+      const s = await (await fetch('/api/session', {credentials:'same-origin'})).json();
+      state.me = s.me || null;
+      if(!state.me) location.href = '/login';
+    }catch(_){ state.authError = '无法连接私有后端'; }
+  }else if(state.token){
     try{
       state.me = await verifyToken(state.token);
     }catch(e){
@@ -1535,6 +1555,9 @@ window.addEventListener('popstate', render);
       sessionStorage.removeItem(SS_TOKEN);
     }
   }
+  document.getElementById('footStorage').innerHTML = BACKEND
+    ? 'key 由服务端保管 · <a href="https://github.com/ACMagnus/gidhub">源码</a>'
+    : '你的 key 只保存在本机浏览器 · <a href="https://github.com/ACMagnus/gidhub">源码</a>';
   updateHeader();
   render();
 })();
