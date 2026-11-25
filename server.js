@@ -20,6 +20,8 @@ const HOST = process.env.HOST || '127.0.0.1';
 const CONFIG_DIR = process.env.GIDHUB_CONFIG_DIR || path.join(os.homedir(), '.config', 'gidhub');
 const AUTH_FILE = path.join(CONFIG_DIR, 'auth.json');
 const PASSWORD_FILE = path.join(CONFIG_DIR, 'login.txt');
+const VAULT_FILE = path.join(CONFIG_DIR, 'token.enc');
+const VAULT_KEY_FILE = path.join(CONFIG_DIR, 'token.key');
 const INDEX_FILE = path.join(__dirname, 'index.html');
 const SESSION_TTL = 30 * 24 * 3600 * 1000;
 const COOKIE = 'gidhub_sid';
@@ -56,8 +58,62 @@ function readGitHubToken() {
   return '';
 }
 
+let cachedToken = '';
+
+function vaultKey() {
+  if (fs.existsSync(VAULT_KEY_FILE)) {
+    const key = Buffer.from(fs.readFileSync(VAULT_KEY_FILE, 'utf8').trim(), 'base64');
+    if (key.length !== 32) throw new Error('token.key 长度不对');
+    return key;
+  }
+  const key = crypto.randomBytes(32);
+  fs.writeFileSync(VAULT_KEY_FILE, key.toString('base64') + '\n', { mode: 0o600 });
+  return key;
+}
+
+function encryptToken(plain) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', vaultKey(), iv);
+  const enc = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, enc]).toString('base64');
+}
+
+function decryptToken(payload) {
+  const raw = Buffer.from(String(payload || '').trim(), 'base64');
+  if (raw.length < 28) throw new Error('token.enc 内容不完整');
+  const iv = raw.subarray(0, 12);
+  const tag = raw.subarray(12, 28);
+  const enc = raw.subarray(28);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', vaultKey(), iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8');
+}
+
+function loadToken() {
+  if (cachedToken) return cachedToken;
+  const envToken = (process.env.GITHUB_TOKEN || '').trim();
+  if (envToken) {
+    cachedToken = envToken;
+    return cachedToken;
+  }
+  if (fs.existsSync(VAULT_FILE)) {
+    try {
+      cachedToken = decryptToken(fs.readFileSync(VAULT_FILE, 'utf8'));
+      return cachedToken;
+    } catch (e) {
+      throw new Error('无法解密 token.enc：' + e.message);
+    }
+  }
+  const plain = readGitHubToken();
+  if (!plain) throw new Error('没有找到 GitHub token：请先 gh auth login，或在启动时设置 GITHUB_TOKEN');
+  fs.writeFileSync(VAULT_FILE, encryptToken(plain) + '\n', { mode: 0o600 });
+  cachedToken = plain;
+  return cachedToken;
+}
+
 function token() {
-  const t = readGitHubToken();
+  const t = loadToken();
   if (!t) throw new Error('没有找到 GitHub token：请先 gh auth login，或在启动时设置 GITHUB_TOKEN');
   return t;
 }

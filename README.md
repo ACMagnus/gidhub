@@ -26,7 +26,8 @@
 `server.js` 是一个单文件 Node 服务，提供：
 
 - 站主密码登录，会话 Cookie，30 天
-- GitHub token 只存在服务端（默认读取 `~/.config/gh/hosts.yml`，也可用 `GITHUB_TOKEN`）
+- GitHub token 只存在服务端：首次启动从 `~/.config/gh/hosts.yml` 读取，然后用 AES-256-GCM 加密到 `~/.config/gidhub/token.enc`，运行时只在本机内存解密
+- `token.key` 是单独的 32 字节密钥文件，和 `token.enc` 一样权限 600
 - `/api/github/*` 代理 GitHub API
 - `/api/asset?url=` 代理私有仓库的 raw / release 文件
 - 浏览器只拿到登录会话，页面源码、仓库、网络请求里都没有 token
@@ -41,8 +42,11 @@ node server.js
 
 - `~/.config/gidhub/login.txt`：站主密码，权限 600
 - `~/.config/gidhub/auth.json`：密码哈希，权限 600
+- `~/.config/gidhub/token.enc` / `token.key`：加密后的 GitHub token 和密钥，权限 600
 
 多设备访问同一个后端时，每台设备只需输入一次站主密码。token 不会下发到任何设备。
+
+说明：`~/.config/gh/hosts.yml` 里仍然有 gh CLI 使用的明文 token。要让服务端只依赖加密副本，可以先撤销旧 token、换一个新 token，再删掉 `token.enc` 让服务端重新生成；或者只保留 `token.enc` 供服务端使用。
 
 ## 说明
 
