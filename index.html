@@ -1213,7 +1213,7 @@ async function viewNew(){
   const draftName = draft && draft.name ? draft.name : '';
   const draftBanner = draft ? '<div class="ok-box" style="margin-bottom:14px"><b>来自审核 #' + esc(String(draft.issue || '')) + '</b><span class="muted"> · ' + esc(draft.title || '') + '</span><button class="btn sm" type="button" data-action="clear-review" style="margin-left:auto">清除</button></div>' : '';
   return '<section class="page wrap">' +
-    '<div class="page-head"><div><h1>新建站点</h1><p>' + (state.me ? '填好内容，创建仓库并开启 GitHub Pages。发布后网址可以直接分享。' : '可以先预览、下载 HTML，不用 key；要发布到 GitHub Pages 时再连接你自己的 GitHub。') + '</p></div><a class="btn ghost" href="#/">取消</a></div>' +
+    '<div class="page-head"><div><h1>新建站点</h1><p>' + (state.me ? '填好内容，创建仓库并开启 GitHub Pages。发布后网址可以直接分享。' : '可以先预览、下载 HTML，也可以提交审核，全程不用 key；审核通过后由站主发布。') + '</p></div><a class="btn ghost" href="#/">取消</a></div>' +
     draftBanner +
     '<div class="new-grid">' +
       '<form class="form-card" id="newSiteForm">' +
