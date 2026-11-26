@@ -1616,6 +1616,10 @@ async function render(){
     app.innerHTML = errorPage(e);
   }
 }
+/* 公开站禁用右键：只是表面防护，不能替代服务端保管 key */
+if(!BACKEND){
+  document.addEventListener('contextmenu', function(e){ e.preventDefault(); }, {capture:true});
+}
 window.addEventListener('hashchange', render);
 window.addEventListener('popstate', render);
 
