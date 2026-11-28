@@ -771,7 +771,7 @@ async function viewHome(){
       '<div>' +
         '<div class="eyebrow">' + icon('check', 12) + ' GITHUB PAGES · 真建站</div>' +
         '<h1>用 GitHub 账号，<br>真的建一个网站。</h1>' +
-        '<p>' + (BACKEND ? '站主 key 已保存在服务端，直接选模板、填标题和介绍。' : '连接你的 GitHub key，选一个模板，填上标题和介绍。') + 'GidHub 会在你的账号下创建仓库、提交文件、开启 Pages，最后给你一个能直接打开的网址。' + (BACKEND ? 'key 不出服务端，仓库和站点都在 GitHub。' : '没有服务器，也没有假预览。') + '</p>' +
+        '<p>' + (BACKEND ? '站主 key 已保存在服务端，选模板或直接贴自己的 HTML，填标题和介绍。' : '连接你的 GitHub key，选模板或直接贴 HTML，填上标题和介绍。') + 'GidHub 会在你的账号下创建仓库、提交文件、开启 Pages，最后给你一个能直接打开的网址。' + (BACKEND ? 'key 不出服务端，仓库和站点都在 GitHub。' : '没有服务器，也没有假预览。') + '</p>' +
         '<div class="hero-actions">' +
           '<a class="btn primary lg" href="#/new">' + icon('plus',16) + ' 开始建站</a>' +
           '<a class="btn lg" href="' + (signed ? '#/' + encodeURIComponent(state.me.login) : '#/connect') + '">' + (signed ? '查看我的主页' : '先连接 GitHub') + '</a>' +
@@ -795,7 +795,7 @@ async function viewHome(){
       '<aside>' +
         '<div class="side-steps"><h3>三步，真的上线</h3>' +
           '<div class="step"><span class="n">1</span><div><b>' + (BACKEND ? '登录私有控制台' : '连接 GitHub key') + '</b><span>' + (BACKEND ? '站主密码登录，key 由服务端保管。' : '只存本机浏览器，请求直连 api.github.com。') + '</span></div></div>' +
-          '<div class="step"><span class="n">2</span><div><b>选模板，填内容</b><span>右边实时预览，不满意就改。</span></div></div>' +
+          '<div class="step"><span class="n">2</span><div><b>选模板或贴 HTML</b><span>右边实时预览，不满意就改。</span></div></div>' +
           '<div class="step"><span class="n">3</span><div><b>创建仓库并开 Pages</b><span>自动提交文件、开启 Pages，拿到真网址。</span></div></div>' +
         '</div>' +
         '<div class="side-steps" style="margin-top:16px"><h3>这个站做了什么</h3><p class="muted small" style="margin:0 0 10px">不是静态演示页。仓库、文件、Releases、Issues 全部实时读 GitHub；建站、改文件、开 Issue 也真的写回 GitHub。</p><a class="btn primary sm" href="#/new">试一次</a></div>' +
@@ -1181,6 +1181,12 @@ function buildSiteHtml(data, owner, repo){
     (gh ? '<div style="margin-top:36px"><a style="font-weight:600" href="' + gh + '">在 GitHub 查看这个站点 →</a></div>' : '') +
     '</main><footer><div class="wrap"><span>' + title + '</span><span>Built on GitHub Pages</span></div></footer></div></body></html>';
 }
+function customHtmlDocument(html, title){
+  const s = String(html || '').trim();
+  if(!s) return '';
+  if(/<!doctype\s+html|<html[\s>]/i.test(s)) return s;
+  return '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + esc(title || '未命名站点') + '</title></head><body>' + s + '</body></html>';
+}
 async function viewReview(){
   if(!state.me) return authGate('审核队列只对站主开放。');
   let issues = [];
@@ -1219,16 +1225,16 @@ async function viewNew(){
       '<form class="form-card" id="newSiteForm">' +
         '<div class="field"><label for="siteName">仓库名</label><div class="repo-name-row"><span class="mono muted small owner">' + esc(login) + ' /</span><input class="input mono" id="siteName" name="name" placeholder="my-site" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,38}" required value="' + esc(draftName) + '"><span class="muted small suffix">.github.io</span></div><span class="hint">英文、数字、- _ .，会变成 ' + esc(login.toLowerCase()) + '.github.io/仓库名/。</span></div>' +
         '<div class="field"><label for="siteDesc">仓库简介</label><input class="input" id="siteDesc" name="description" placeholder="一句话说明这个站点"></div>' +
-        '<div class="field"><label>模板</label><div class="tpl-grid">' +
+        '<div class="field"><label>起始模板（可选）</label><div class="tpl-grid">' +
           '<label class="tpl"><input type="radio" name="template" value="profile" checked><b>个人主页</b><span>名字、介绍、链接</span></label>' +
           '<label class="tpl"><input type="radio" name="template" value="product"><b>产品页</b><span>标题、卖点、按钮</span></label>' +
           '<label class="tpl"><input type="radio" name="template" value="blank"><b>极简页</b><span>只有一句话</span></label>' +
-        '</div></div>' +
+        '</div><span class="hint">模板只是快捷样式；不想用模板就在下面直接贴自己的 HTML。</span></div>' +
         '<div class="field"><label for="siteTitle">站点标题</label><input class="input" id="siteTitle" name="title" placeholder="竹下一刀魂" required maxlength="80"></div>' +
         '<div class="field"><label for="siteTagline">一句话介绍</label><input class="input" id="siteTagline" name="tagline" placeholder="做 Minecraft 离线启动器，也做一些能直接用的东西。" maxlength="160"></div>' +
         '<div class="field"><label for="siteAbout">正文</label><textarea class="input" id="siteAbout" name="about" placeholder="介绍一下你自己、这个项目，或者这个站点要放什么。" maxlength="1200"></textarea></div>' +
         '<div class="field"><label for="siteAccent">主题色</label><div class="swatches"><input class="color-input" type="color" id="siteAccent" name="accent" value="#1f883d"><button class="swatch" type="button" data-accent="#1f883d" data-on="1" style="background:#1f883d" aria-label="绿色"></button><button class="swatch" type="button" data-accent="#0969da" style="background:#0969da" aria-label="蓝色"></button><button class="swatch" type="button" data-accent="#8250df" style="background:#8250df" aria-label="紫色"></button><button class="swatch" type="button" data-accent="#bc4c00" style="background:#bc4c00" aria-label="橙色"></button><button class="swatch" type="button" data-accent="#1f2328" style="background:#1f2328" aria-label="黑色"></button></div></div>' +
-        '<div class="field"><label class="check"><input type="checkbox" id="useCustom" name="useCustom"' + (draftHtml ? ' checked' : '') + '> 用我自己写的 HTML 覆盖模板</label><textarea class="input mono" id="siteCustom" name="custom" placeholder="<!doctype html>…" style="' + (draftHtml ? '' : 'display:none;') + 'min-height:160px" spellcheck="false">' + esc(draftHtml) + '</textarea></div>' +
+        '<div class="field"><label for="siteCustom">自定义 HTML（可选）</label><textarea class="input mono" id="siteCustom" name="custom" placeholder="完整 HTML 或片段都可以，例如 &lt;h1&gt;你好&lt;/h1&gt;；留空则用上面的模板生成。" style="min-height:180px" spellcheck="false">' + esc(draftHtml) + '</textarea><span class="hint">填了这里就以你的 HTML 为准，不再套模板。</span></div>' +
         '<div class="form-actions"><button class="btn primary lg" type="submit">' + (state.me ? '创建并发布到 GitHub Pages' : '连接 GitHub 后发布') + '</button>' +
           '<button class="btn lg" type="button" data-action="download-site">' + icon('download',14) + ' 下载 HTML（不用 key）</button>' +
           (state.me ? '' : '<button class="btn lg" type="button" data-action="submit-review">提交审核（不用 key）</button>') + '</div>' +
@@ -1244,9 +1250,9 @@ function updatePreview(){
   if(!form) return;
   const frame = document.getElementById('sitePreview');
   if(!frame) return;
-  const custom = form.useCustom && form.useCustom.checked ? (form.siteCustom ? form.siteCustom.value : '') : '';
+  const custom = form.siteCustom ? form.siteCustom.value : '';
   let html;
-  if(custom.trim()) html = custom;
+  if(custom.trim()) html = customHtmlDocument(custom, (form.siteTitle && form.siteTitle.value) || '预览');
   else html = buildSiteHtml(sampleSiteData(form), state.me ? state.me.login : 'your-name', form.siteName ? form.siteName.value.trim() : 'my-site');
   frame.srcdoc = html;
 }
@@ -1278,11 +1284,10 @@ async function createSite(form){
   const about = (form.siteAbout.value || '').trim();
   const template = (form.querySelector('input[name=template]:checked') || {}).value || 'profile';
   const accent = form.siteAccent.value || '#1f883d';
-  const custom = form.useCustom.checked ? (form.siteCustom.value || '').trim() : '';
+  const custom = (form.siteCustom.value || '').trim();
   if(!state.me) { location.hash = '#/connect'; return; }
   if(!name || !title){ showToast('仓库名和站点标题必填'); return; }
   if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,38}$/.test(name)){ showToast('仓库名只能用英文、数字、- _ .'); return; }
-  if(custom && !/<!doctype|<html/i.test(custom)){ showToast('自定义 HTML 需要是完整的网页'); return; }
   box.hidden = false;
   box.innerHTML = '<h3>正在建站</h3>';
   btn.disabled = true;
@@ -1298,7 +1303,7 @@ async function createSite(form){
     const owner = repo.owner.login;
     const branch = repo.default_branch || 'main';
     logLine(box, '仓库已创建：' + owner + '/' + repo.name, 'ok');
-    const html = custom || buildSiteHtml({title, tagline, about, template, accent}, owner, repo.name);
+    const html = custom ? customHtmlDocument(custom, title) : buildSiteHtml({title, tagline, about, template, accent}, owner, repo.name);
     let readmeSha = null;
     try{
       const current = await api('/repos/' + owner + '/' + repo.name + '/contents/README.md');
@@ -1362,9 +1367,10 @@ async function handleAction(el){
   if(action === 'submit-review'){
     const form = document.getElementById('newSiteForm');
     if(!form) return;
-    const custom = form.useCustom && form.useCustom.checked ? (form.siteCustom ? form.siteCustom.value.trim() : '') : '';
+    const custom = form.siteCustom ? form.siteCustom.value.trim() : '';
     const name = (form.siteName && form.siteName.value.trim()) || 'my-site';
-    const html = custom || buildSiteHtml(sampleSiteData(form), 'your-name', name);
+    const title = (form.siteTitle && form.siteTitle.value.trim()) || name;
+    const html = custom ? customHtmlDocument(custom, title) : buildSiteHtml(sampleSiteData(form), 'your-name', name);
     const body = '<!-- gidhub-site -->\n站点名：' + name + '\n模板：' + (custom ? '自定义 HTML' : (form.template ? (form.template.value || 'profile') : 'profile')) + '\n提交人：访客（无需 key）\n\n```html\n' + html + '\n```\n';
     const url = 'https://github.com/ACMagnus/gidhub/issues/new?labels=site-submission&title=' + encodeURIComponent('[站点申请] ' + name) + '&body=' + encodeURIComponent(body);
     try{ navigator.clipboard.writeText(html); }catch(_){}
@@ -1396,8 +1402,9 @@ async function handleAction(el){
   if(action === 'download-site'){
     const form = document.getElementById('newSiteForm');
     if(!form) return;
-    const custom = form.useCustom && form.useCustom.checked ? (form.siteCustom ? form.siteCustom.value.trim() : '') : '';
-    const html = custom || buildSiteHtml(sampleSiteData(form), state.me ? state.me.login : 'your-name', form.siteName ? form.siteName.value.trim() : 'my-site');
+    const custom = form.siteCustom ? form.siteCustom.value.trim() : '';
+    const title = (form.siteTitle && form.siteTitle.value.trim()) || '未命名站点';
+    const html = custom ? customHtmlDocument(custom, title) : buildSiteHtml(sampleSiteData(form), state.me ? state.me.login : 'your-name', form.siteName ? form.siteName.value.trim() : 'my-site');
     const blob = new Blob([html], {type:'text/html;charset=utf-8'});
     const a = document.createElement('a');
     const name = (form.siteName && form.siteName.value.trim()) || 'site';
@@ -1550,10 +1557,6 @@ document.getElementById('app').addEventListener('input', function(e){
 });
 document.getElementById('app').addEventListener('change', function(e){
   if(e.target.closest('#newSiteForm')){
-    if(e.target.id === 'useCustom'){
-      const ta = document.getElementById('siteCustom');
-      if(ta) ta.style.display = e.target.checked ? 'block' : 'none';
-    }
     updatePreview();
   }
 });
